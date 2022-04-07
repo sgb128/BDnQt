@@ -18,7 +18,7 @@ def host_ping(adresses: list, tout=500, rq=1):
             address = ip_address(address)
         except:
             pass
-        process = Popen(f"ping {address} -w {tout} -n {rq}", shell=False, stdout=PIPE)
+        process = Popen(['ping', f'{address}', '-w', f'{tout}', '-n', f'{rq}'], shell=False, stdout=PIPE)
         process.wait()
 
         if process.returncode:
@@ -32,5 +32,5 @@ def host_ping(adresses: list, tout=500, rq=1):
 
 
 if __name__ == '__main__':
-    ips = ['www.google.com', '8.8.8.0', '192.168.0.1', '192.168.0.30', '192.168.0.40']
+    ips = ['www.google.com', '8.8.8.8', '192.168.0.1', '192.168.0.30', '192.168.0.40']
     host_ping(ips)
