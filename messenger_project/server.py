@@ -12,14 +12,12 @@ from errors import IncorrectDataRecivedError
 from common.variables import *
 from common.utils import *
 from decos import log
+from server_db import ServerStorage
 
 # Инициализация логирования сервера.
 logger = clog.logger
 
 
-# Задание 2: Реализовать метакласс ServerVerifier, выполняющий базовую проверку класса «Сервер»:
-# отсутствие вызовов connect для сокетов;
-# использование сокетов для работы по TCP.
 class ServerVerifier(type):
     def __init__(cls, m_classes, m_parents, m_attrs):
         super(ServerVerifier, cls).__init__(m_classes, m_parents, m_attrs)
@@ -54,11 +52,6 @@ class ServerVerifier(type):
             # print('Не обнаружено использования сокета для работы по TCP')
 
 
-# 3. Реализовать дескриптор для класса серверного сокета, а в нем — проверку номера порта.
-# Это должно быть целое число (>=0). Значение порта по умолчанию равняется 7777.
-# Дескриптор надо создать в отдельном классе. Его экземпляр добавить в пределах класса серверного сокета.
-# Номер порта передается в экземпляр дескриптора при запуске сервера.
-
 class CheckServer:
     """
     Дескриптор.
@@ -80,11 +73,12 @@ class CheckServer:
 class Server(metaclass=ServerVerifier):
     port = CheckServer()
 
-    def __init__(self, listen_address, listen_port):
+    def __init__(self, listen_address, listen_port, data_base):
         # Параметры подключения
         self.sock = None
         self.addr = listen_address
         self.port = listen_port
+        self.data_base = data_base
 
         # Список подключённых клиентов.
         self.clients = []
@@ -120,6 +114,8 @@ class Server(metaclass=ServerVerifier):
             # соединение.
             if message[USER][ACCOUNT_NAME] not in self.names.keys():
                 self.names[message[USER][ACCOUNT_NAME]] = client
+                client_ip, client_port = client.getpeername()
+                self.database.user_login(message[USER][ACCOUNT_NAME], client_ip, client_port)
                 send_message(client, RESPONSE_200)
             else:
                 response = RESPONSE_400
@@ -135,6 +131,7 @@ class Server(metaclass=ServerVerifier):
             return
         # Если клиент выходит
         elif ACTION in message and message[ACTION] == EXIT and ACCOUNT_NAME in message:
+            self.data_base.user_logout(message[ACCOUNT_NAME])
             self.clients.remove(self.names[ACCOUNT_NAME])
             self.names[ACCOUNT_NAME].close()
             del self.names[ACCOUNT_NAME]
@@ -228,10 +225,12 @@ def main():
     # то задаём значения по умолчанию.
     listen_address, listen_port = arg_parser()
 
-    # Создание экземпляра класса - сервера.
-    server = Server(listen_address, listen_port)
-    server.main_loop()
+    db = ServerStorage()
 
+    # Создание экземпляра класса - сервера.
+    server = Server(listen_address, listen_port, db)
+    server.daemon = True
+    server.main_loop()
 
 if __name__ == '__main__':
     main()
