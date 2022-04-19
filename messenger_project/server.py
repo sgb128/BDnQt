@@ -1,21 +1,47 @@
+import os.path
 import socket
 import sys
 import argparse
 import dis
+import threading
 from pprint import pprint
 import json
 import logging
 import select
 import time
+import configparser
 import logs.config_server_log as clog
 from errors import IncorrectDataRecivedError
 from common.variables import *
 from common.utils import *
 from decos import log
 from server_db import ServerStorage
+from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtCore import QTimer
+# from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from server_gui import MainWindow, gui_create_model, HistoryWindow, create_stat_model, ConfigWindow
 
 # Инициализация логирования сервера.
 logger = clog.logger
+conflag_lock = threading.Lock()
+
+# Мне просто надоело каждый раз писать имена параметров, поэтому ниже 2 класса делают это за меня
+# Если на ваш взгляд этот способ некорректный - буду рад подсказке!
+class Settings:
+    def __init__(self):
+        self.database_path = 'Database_path'
+        self.database_file = 'Database_file'
+        self.default_port = 'Default_port'
+        self.listen_address = 'Listen_address'
+
+
+class CCONFIG:
+    def __init__(self):
+        self.settings = 'SETTINGS'
+        self.SETTINGS = Settings()
+
+
+SET_CONF = CCONFIG()
 
 
 class ServerVerifier(type):
@@ -70,7 +96,7 @@ class CheckServer:
         instance.__dict__[self.attr] = value
 
 
-class Server(metaclass=ServerVerifier):
+class Server(threading.Thread, metaclass=ServerVerifier):
     port = CheckServer()
 
     def __init__(self, listen_address, listen_port, data_base):
@@ -107,6 +133,7 @@ class Server(metaclass=ServerVerifier):
     #     словарь-ответ в случае необходимости.
     @log
     def process_client_message(self, message, client):
+        global new_connection
         # logger.debug(f'Разбор сообщения от клиента : {message}')
         # Если это сообщение о присутствии, принимаем и отвечаем
         if ACTION in message and message[ACTION] == PRESENCE and TIME in message and USER in message:
@@ -117,6 +144,8 @@ class Server(metaclass=ServerVerifier):
                 client_ip, client_port = client.getpeername()
                 self.database.user_login(message[USER][ACCOUNT_NAME], client_ip, client_port)
                 send_message(client, RESPONSE_200)
+                with conflag_lock:
+                    new_connection = True
             else:
                 response = RESPONSE_400
                 response[ERROR] = 'Имя пользователя уже занято.'
@@ -135,6 +164,8 @@ class Server(metaclass=ServerVerifier):
             self.clients.remove(self.names[ACCOUNT_NAME])
             self.names[ACCOUNT_NAME].close()
             del self.names[ACCOUNT_NAME]
+            with conflag_lock:
+                new_connection = True
             return
         # Иначе отдаём Bad request
         else:
@@ -178,8 +209,8 @@ class Server(metaclass=ServerVerifier):
             try:
                 if self.clients:
                     recv_data_lst, send_data_lst, err_lst = select.select(self.clients, self.clients, [], 0)
-            except OSError:
-                pass
+            except OSError as err:
+                logger.error(f'Ошибка работы с сокетами: {err}')
 
             # принимаем сообщения и если ошибка, исключаем клиента.
             if recv_data_lst:
@@ -221,16 +252,94 @@ def arg_parser():
 
 
 def main():
+    config = configparser.ConfigParser()
+
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    config.read(f"{dir_path}/{'server.ini'}")
     # Загрузка параметров командной строки, если нет параметров,
     # то задаём значения по умолчанию.
-    listen_address, listen_port = arg_parser()
+    listen_address, listen_port = arg_parser(
+        config[SET_CONF.settings][SET_CONF.SETTINGS.default_port],
+        config[SET_CONF.settings][SET_CONF.SETTINGS.listen_address]
+    )
 
-    db = ServerStorage()
+    db = ServerStorage(
+        os.path.join(
+            config[SET_CONF.settings][SET_CONF.SETTINGS.database_path],
+            config[SET_CONF.settings][SET_CONF.SETTINGS.database_file]
+        )
+    )
 
     # Создание экземпляра класса - сервера.
     server = Server(listen_address, listen_port, db)
     server.daemon = True
     server.main_loop()
+
+    server_app = QApplication(sys.argv)
+    main_window = MainWindow()
+
+    main_window.statusBar().showMessage('Сервер работает')
+    main_window.active_clients_table.setModel(gui_create_model(db))
+    main_window.active_clients_table.resizeColumnsToContents()
+    main_window.active_clients_table.resizeRowsToContents()
+
+    def list_update():
+        global new_connection
+        if new_connection:
+            main_window.active_clients_table.setModel(gui_create_model(db))
+            main_window.active_clients_table.resizeColumnsToContents()
+            main_window.active_clients_table.resizeRowsToContents()
+            with conflag_lock:
+                new_connection = False
+
+    def show_statistics():
+        global stat_window
+        stat_window = HistoryWindow()
+        stat_window.history_table.setModel(gui_create_model(db))
+        stat_window.history_table.resizeColumnsToContents()
+        stat_window.history_table.resizeRowsToContents()
+        stat_window.show()
+
+    def server_config():
+        global config_window
+        config_window = ConfigWindow()
+        config_window.db_path.insert(config[SET_CONF.settings][SET_CONF.SETTINGS.database_path])
+        config_window.db_file.insert(config[SET_CONF.settings][SET_CONF.SETTINGS.database_file])
+        config_window.port.insert(config[SET_CONF.settings][SET_CONF.SETTINGS.default_port])
+        config_window.ip.insert(config[SET_CONF.settings][SET_CONF.SETTINGS.listen_address])
+        config_window.save_btn.clicked.connect(save_server_config)
+
+    def save_server_config():
+        global config_window
+        message = QMessageBox()
+        config[SET_CONF.settings][SET_CONF.SETTINGS.database_path] = config_window.db_path.text()
+        config[SET_CONF.settings][SET_CONF.SETTINGS.database_file] = config_window.db_file.text()
+        try:
+            port = int(config_window.port.text())
+        except ValueError:
+            message.warning(config_window, 'Ошибка', 'Порт должен быть числом')
+        else:
+            config[SET_CONF.settings][SET_CONF.SETTINGS.listen_address] = config_window.ip.text()
+            if 1023 < port < 65536:
+                config[SET_CONF.settings][SET_CONF.SETTINGS.default_port] = str(port)
+                print(port)
+                with open('server.ini', 'w') as conf:
+                    config.write(conf)
+                    message.information(config_window, 'ОК', 'Настройки успешно сохранены')
+            else:
+                message.warning(config_window, 'Ошибка', 'Порт должен быть от 1024 до 65535')
+
+    timer = QTimer()
+    timer.timeout.connect(list_update)
+    timer.start(1000)
+
+    main_window.refresh_button.triggered.connect(list_update)
+    main_window.show_history_button.triggered.connect(show_statistics)
+    main_window.config_btn.triggered.connect(server_config)
+
+    server_app.exec_()
+
+
 
 if __name__ == '__main__':
     main()

@@ -12,6 +12,7 @@ class ServerStorage:
         id = Column(Integer, primary_key=True)
         name = Column(String)
         last_login = Column(DateTime)
+
         # ch_rel_a = relationship("ActiveUsers", back_populates="p_rel_a")
         # ch_rel_l = relationship("LoginHistory", back_populates="p_rel_l")
 
@@ -29,6 +30,7 @@ class ServerStorage:
         ip_address = Column(String)
         port = Column(Integer)
         login_time = Column(DateTime)
+
         # p_rel_a = relationship("AllUsers", back_populates="ch_rel_a")
 
         def __init__(self, user_id, ip_address, port, login_time):
@@ -47,6 +49,7 @@ class ServerStorage:
         ip_address = Column(String)
         port = Column(Integer)
         date_login = Column(DateTime)
+
         # p_rel_l = relationship("AllUsers", back_populates="ch_rel_l")
 
         def __init__(self, user, ip_address, port, date_login):
@@ -58,10 +61,34 @@ class ServerStorage:
         def __repr__(self):
             return f"<LoginHistory({self.user_id},{self.ip_address},{self.port},{self.date_login})>"
 
-    def __init__(self):
-        self.engine = create_engine('sqlite:///server_db.db3', echo=False, pool_recycle=7200)
-        self.ServerDB.metadata.create_all(self.engine)  # Вот до этого я не догадался. И в результате этого объявление
-        # класса ServerDB у меня было до создания класса ServerStorage
+    class UsersContacts(ServerDB):
+        __tablename__ = 'users_contacts'
+        id = Column(Integer, primary_key=True)
+        user = Column(String, ForeignKey('all_users.id'))
+        contact = Column(String, ForeignKey('all_users.id'))
+
+        def __init__(self, user, contact):
+            self.id = None
+            self.user = user
+            self.contact = contact
+
+    class UsersHistory(ServerDB):
+        __tablename__ = 'users_history'
+        id = Column(Integer, primary_key=True)
+        user = Column(String, ForeignKey('all_users.id'))
+        sent = Column(Integer)
+        receive = Column(Integer)
+
+        def __init__(self, user, sent, receive):
+            self.id = None
+            self.user = user
+            self.sent = sent
+            self.receive = receive
+
+    def __init__(self, path):
+        self.engine = create_engine(f'sqlite:///{path}', echo=False, pool_recycle=7200,
+                                    connect_args={'check_same_tread': False})
+        self.ServerDB.metadata.create_all(self.engine)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
         self.session.query(self.ActiveUsers).delete()
