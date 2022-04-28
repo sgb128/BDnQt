@@ -1,6 +1,9 @@
+import sys
 from sqlalchemy import create_engine, Table, Column, Integer, String, Text, MetaData, DateTime, ForeignKey
 from sqlalchemy.orm import mapper, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+
+sys.path.append('../')
 from common.variables import *
 import datetime
 
@@ -42,15 +45,14 @@ class ClientDatabase:
             self.name = contact
 
     def __init__(self, name):
-        self.database_engine = create_engine(f'sqlite:///client_{name}.db3',
-                                             echo=False,
-                                             pool_recycle=7200,
-                                             connect_args={'check_same_thread': False})
+        self.engine = create_engine(f'sqlite:///client_{name}.db3',
+                                    echo=False,
+                                    pool_recycle=7200,
+                                    connect_args={'check_same_thread': False})
 
         self.ClientDB.metadata.create_all(self.engine)
-        self.metadata.create_all(self.database_engine)
 
-        Session = sessionmaker(bind=self.database_engine)
+        Session = sessionmaker(bind=self.engine)
         self.session = Session()
         self.session.query(self.Contacts).delete()
         self.session.commit()

@@ -43,3 +43,7 @@ RESPONSE_400 = {
             ERROR: None
         }
 
+RESPONSE_202 = {
+            RESPONSE: 202,
+            ERROR: None
+        }

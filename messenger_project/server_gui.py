@@ -58,9 +58,9 @@ class MainWindow(QMainWindow):
 
     def initUI(self):
         # Кнопка выхода
-        self.ExitAction = QAction('Выход', self)
-        self.ExitAction.setShortcut('Ctrl+Q')
-        self.ExitAction.triggered.connect(qApp.quit)
+        exitAction = QAction('Выход', self)
+        exitAction.setShortcut('Ctrl+Q')
+        exitAction.triggered.connect(qApp.quit)
         # Кнопка обновить список клиентов
         self.refresh_button = QAction('Обновить список', self)
         # Кнопка вывести историю сообщений
@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
         self.statusBar()
         # Тулбар
         self.toolbar = self.addToolBar('MainBar')
-        self.toolbar.addAction(self.ExitAction)
+        self.toolbar.addAction(exitAction)
         self.toolbar.addAction(self.refresh_button)
         self.toolbar.addAction(self.show_history_button)
         self.toolbar.addAction(self.config_btn)
@@ -183,56 +183,22 @@ class ConfigWindow(QDialog):
 
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    main_window = MainWindow()
-    main_window.statusBar().showMessage('Тестовое сообщение статусбара')
-    test_list = QStandardItemModel(main_window)
-    test_list.setHorizontalHeaderLabels(['Имя клиента', 'IP Адрес', 'Порт', 'Время подключения'])
-    test_list.appendRow(
-        [
-            QStandardItem('sgb1'),
-            QStandardItem('192.168.1.1'),
-            QStandardItem('12345'),
-            QStandardItem('6:38:20')
-        ]
-    )
-    test_list.appendRow(
-        [
-            QStandardItem('sgb2'),
-            QStandardItem('192.168.1.2'),
-            QStandardItem('67890'),
-            QStandardItem('6:39:15')
-        ]
-    )
-    main_window.active_clients_table.setModel(test_list)
-    main_window.active_clients_table.resizeColumnsToContents()
-    app.exec_()
 
-    # ----------------------------------------------------------------------------------------------------------------
     # app = QApplication(sys.argv)
-    # hist_window = HistoryWindow()
-    # test_list = QStandardItemModel(hist_window)
-    # test_list.setHorizontalHeaderLabels(['Имя клиента', 'Дата/время последнего входа', 'Отправлено', 'Получено'])
-    # test_list.appendRow(
-    #     [
-    #         QStandardItem('sgb1'),
-    #         QStandardItem('Mon Apr 19 6:44:49 2022'),
-    #         QStandardItem('5'),
-    #         QStandardItem('10')
-    #     ]
-    # )
-    # test_list.appendRow(
-    #     [
-    #         QStandardItem('sgb2'),
-    #         QStandardItem('Mon Apr 19 6:46:32 2022'),
-    #         QStandardItem('15'),
-    #         QStandardItem('20')
-    #     ]
-    # )
-    # hist_window.history_table.setModel(test_list)
-    # hist_window.history_table.resizeColumnsToContents()
+    # ex = MainWindow()
+    # ex.statusBar().showMessage('Test Statusbar Message')
+    # test_list = QStandardItemModel(ex)
+    # test_list.setHorizontalHeaderLabels(['Имя Клиента', 'IP Адрес', 'Порт', 'Время подключения'])
+    # test_list.appendRow([QStandardItem('1'), QStandardItem('2'), QStandardItem('3')])
+    # test_list.appendRow([QStandardItem('4'), QStandardItem('5'), QStandardItem('6')])
+    # ex.active_clients_table.setModel(test_list)
+    # ex.active_clients_table.resizeColumnsToContents()
+    # print('JKJKJK')
     # app.exec_()
-    # -----------------------------------------------------------------------------------------------------------
-    # app = QApplication(sys.argv)
-    # dlg = ConfigWindow()
-    # app.exec_()
+    # print('END')
+
+    app = QApplication(sys.argv)
+    message = QMessageBox
+    dial = ConfigWindow()
+
+    app.exec_()

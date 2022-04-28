@@ -10,7 +10,7 @@ class ServerStorage:
     class AllUsers(ServerDB):
         __tablename__ = 'all_users'
         id = Column(Integer, primary_key=True)
-        name = Column(String)
+        name = Column(String, unique=True)
         last_login = Column(DateTime)
 
         # ch_rel_a = relationship("ActiveUsers", back_populates="p_rel_a")
@@ -33,8 +33,8 @@ class ServerStorage:
 
         # p_rel_a = relationship("AllUsers", back_populates="ch_rel_a")
 
-        def __init__(self, user_id, ip_address, port, login_time):
-            self.user_id = user_id
+        def __init__(self, user, ip_address, port, login_time):
+            self.user = user
             self.ip_address = ip_address
             self.port = port
             self.login_time = login_time
@@ -87,7 +87,7 @@ class ServerStorage:
 
     def __init__(self, path):
         self.engine = create_engine(f'sqlite:///{path}', echo=False, pool_recycle=7200,
-                                    connect_args={'check_same_tread': False})
+                                    connect_args={'check_same_thread': False})
         self.ServerDB.metadata.create_all(self.engine)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
@@ -103,6 +103,8 @@ class ServerStorage:
             user = self.AllUsers(username)
             self.session.add(user)
             self.session.commit()
+            user_in_history = self.UsersHistory(user.id)
+            self.session.add(user_in_history)
         new_active_user = self.ActiveUsers(user.id, ip_address, port, datetime.now())
         self.session.add(new_active_user)
         history = self.LoginHistory(user.id, ip_address, port, datetime.now())
@@ -139,6 +141,51 @@ class ServerStorage:
         ).join(self.AllUsers)
         if username:
             query = query.filter(self.AllUsers.name == username)
+        return query.all()
+
+    def process_message(self, sender, recipient):
+        sender = self.session.query(self.AllUsers).filter_by(name=sender).first().id
+        recipient = self.session.query(self.AllUsers).filter_by(name=recipient).first().id
+        sender_row = self.session.query(self.UsersHistory).filter_by(user=sender).first()
+        sender_row.sent += 1
+        recipient_row = self.session.query(self.UsersHistory).filter_by(user=recipient).first()
+        recipient_row.accepted += 1
+        self.session.commit()
+
+    def add_contact(self, user, contact):
+        user = self.session.query(self.AllUsers).filter_by(name=user).first()
+        contact = self.session.query(self.AllUsers).filter_by(name=contact).first()
+        if not contact or self.session.query(self.UsersContacts).filter_by(user=user.id, contact=contact.id).count():
+            return
+        contact_row = self.UsersContacts(user.id, contact.id)
+        self.session.add(contact_row)
+        self.session.commit()
+
+    def remove_contact(self, user, contact):
+        user = self.session.query(self.AllUsers).filter_by(name=user).first()
+        contact = self.session.query(self.AllUsers).filter_by(name=contact).first()
+        if not contact:
+            return
+        self.session.query(self.UsersContacts).filter(
+            self.UsersContacts.user == user.id,
+            self.UsersContacts.contact == contact.id
+        ).delete()
+        self.session.commit()
+
+    def get_contacts(self, username):
+        user = self.session.query(self.AllUsers).filter_by(name=username).one()
+        query = self.session.query(self.UsersContacts, self.AllUsers.name). \
+            filter_by(user=user.id). \
+            join(self.AllUsers, self.UsersContacts.contact == self.AllUsers.id)
+        return [contact[1] for contact in query.all()]
+
+    def message_history(self):
+        query = self.session.query(
+            self.AllUsers.name,
+            self.AllUsers.last_login,
+            self.UsersHistory.sent,
+            self.UsersHistory.accepted
+        ).join(self.AllUsers)
         return query.all()
 
 
